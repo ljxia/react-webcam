@@ -129,6 +129,8 @@ export default class Webcam extends Component {
         };
       }
 
+      console.log('constraints', constraints);
+
       navigator.getUserMedia(constraints, (stream) => {
         Webcam.mountedInstances.forEach(instance => instance.handleUserMedia(null, stream));
       }, (e) => {
@@ -144,9 +146,9 @@ export default class Webcam extends Component {
         let videoSource = null;
 
         devices.forEach((device) => {
-          if (device.kind === 'audio') {
+          if (device.kind === 'audioinput') {
             audioSource = device.id;
-          } else if (device.kind === 'video') {
+          } else if (device.kind === 'videoinput') {
             videoSource = device.id;
           }
         });
@@ -162,9 +164,9 @@ export default class Webcam extends Component {
         let videoSource = null;
 
         sources.forEach((source) => {
-          if (source.kind === 'audio') {
+          if (source.kind === 'audioinput') {
             audioSource = source.id;
-          } else if (source.kind === 'video') {
+          } else if (source.kind === 'videoinput') {
             videoSource = source.id;
           }
         });
