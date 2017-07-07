@@ -12,10 +12,13 @@ export default class Webcam extends Component {
     audio: true,
     className: '',
     height: 480,
+    mirror: false,
+    rotate: '',
     muted: false,
     onUserMedia: () => {},
     screenshotFormat: 'image/webp',
     width: 640,
+    constraints: undefined
   };
 
   static propTypes = {
@@ -48,7 +51,7 @@ export default class Webcam extends Component {
   constructor() {
     super();
     this.state = {
-      hasUserMedia: false,
+      hasUserMedia: false
     };
   }
 
@@ -82,6 +85,12 @@ export default class Webcam extends Component {
     }
   }
 
+  componentWillReceiveProps(nextProps) {
+    if (nextProps.rotate !== this.props.rotate) {
+      this.initializeCanvas(nextProps.rotate);
+    }
+  }
+
   getScreenshot() {
     if (!this.state.hasUserMedia) return null;
 
@@ -92,7 +101,7 @@ export default class Webcam extends Component {
   getCanvas() {
     if (!this.state.hasUserMedia) return null;
 
-    const video = findDOMNode(this);
+    const video = this.video;
     if (!this.ctx) {
       const canvas = document.createElement('canvas');
       const aspectRatio = video.videoWidth / video.videoHeight;
@@ -116,6 +125,14 @@ export default class Webcam extends Component {
                           navigator.mozGetUserMedia ||
                           navigator.msGetUserMedia;
 
+    const applyConstraints = (constraints) => {
+      navigator.getUserMedia(constraints, (stream) => {
+        Webcam.mountedInstances.forEach(instance => instance.handleUserMedia(null, stream));
+      }, (e) => {
+        Webcam.mountedInstances.forEach(instance => instance.handleUserMedia(e));
+      });
+    }
+
     const sourceSelected = (audioSource, videoSource) => {
       const constraints = {
         video: {
@@ -129,16 +146,12 @@ export default class Webcam extends Component {
         };
       }
 
-      console.log('constraints', constraints);
-
-      navigator.getUserMedia(constraints, (stream) => {
-        Webcam.mountedInstances.forEach(instance => instance.handleUserMedia(null, stream));
-      }, (e) => {
-        Webcam.mountedInstances.forEach(instance => instance.handleUserMedia(e));
-      });
+      applyConstraints(constraints);
     };
 
-    if (this.props.audioSource && this.props.videoSource) {
+    if (this.props.constraints) {
+      applyConstraints(this.props.constraints);
+    } else if (this.props.audioSource && this.props.videoSource) {
       sourceSelected(this.props.audioSource, this.props.videoSource);
     } else if ('mediaDevices' in navigator) {
       navigator.mediaDevices.enumerateDevices().then((devices) => {
@@ -196,19 +209,80 @@ export default class Webcam extends Component {
     });
 
     this.props.onUserMedia();
+
+
+    this.video.addEventListener('canplay', (e) => {
+      this.initializeCanvas(this.props.rotate);
+    });
+
+    this.video.addEventListener('play', (e) => {
+      this.drawLoop = setInterval(() => {
+        if (!this.video) {
+          clearInterval(this.drawLoop);
+          return;
+        }
+        if (this.video.paused || this.video.ended) {
+          clearInterval(this.drawLoop);
+          return;
+        }
+        const cxt = this.canvas.getContext('2d');
+
+        cxt.save();
+
+        if (this.props.mirror) {
+          cxt.translate(this.canvas.width, 0);
+          cxt.scale(-1, 1);
+        }
+
+        if (this.props.rotate === 'left') {
+          cxt.rotate(-1 * (Math.PI / 180) * 90);
+          cxt.translate(-this.video.videoWidth, 0);
+        }
+        else if (this.props.rotate === 'right') {
+          cxt.rotate((Math.PI / 180) * 90);
+          cxt.translate(0, -this.video.videoHeight);
+        }
+
+        cxt.drawImage(this.video, 0, 0, this.video.videoWidth, this.video.videoHeight);
+
+        cxt.restore();
+      }, 33)
+    });
   }
 
+  initializeCanvas(rotate) {
+    if (rotate === '') {
+      this.canvas.setAttribute('width', this.video.videoWidth);
+      this.canvas.setAttribute('height', this.video.videoHeight);
+    }
+    else {
+      this.canvas.setAttribute('width', this.video.videoHeight);
+      this.canvas.setAttribute('height', this.video.videoWidth);
+    }
+  }
+
+  renderCanvas() {
+    return (
+      <canvas
+        key="canvas"
+        ref={(node) => {this.canvas = node;}}
+      ></canvas>
+    )
+  }
   render() {
     return (
-      <video
-        autoPlay
-        width={this.props.width}
-        height={this.props.height}
-        src={this.state.src}
-        muted={this.props.muted}
-        className={this.props.className}
-        style={this.props.style}
-      />
+      <div className='webcam' style={this.props.style}>
+        {this.renderCanvas()}
+        <video
+          autoPlay
+          key="video"
+          ref={(node) => {this.video = node;}}
+          src={this.state.src}
+          muted={this.props.muted}
+          className={this.props.className}
+          style={{visibility: 'hidden', position: 'absolute', left: 0}}
+        />
+      </div>
     );
   }
 }
